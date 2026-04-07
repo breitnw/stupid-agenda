@@ -213,11 +213,8 @@
     ;; update the list of tasks
     (update-tasks!)
 
-    ;; special frame that stops current-timer on close
-    (define current-timer (box #f))
-
     (define frame
-      (new frame% #;frame%/close-handler
+      (new frame%
            [label "agenda"]
            [width frame-width]
            [height frame-height]
