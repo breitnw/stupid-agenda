@@ -135,8 +135,18 @@
 (module+ main
   (update-tasks!)
 
+  ;; special frame that stops current-timer on close
+  (define current-timer (box #f))
+  (define frame%/close-handler
+    (class frame%
+      (super-new)
+      (define/augment (on-close)
+        (define timer (unbox current-timer))
+        (when timer
+          (send timer stop)))))
+
   (define frame
-    (new frame%
+    (new frame%/close-handler
          [label "agenda"]
          [width frame-width]
          [height frame-height]
@@ -164,7 +174,7 @@
             (send dc set-smoothing 'unsmoothed)
             (draw-agenda! dc))]))
 
-  (define _timer
+  (define timer
     (new timer%
          [interval (* 1000 refresh-interval-seconds)]
          [notify-callback
@@ -173,6 +183,8 @@
             (update-tasks!)
             (send canvas init-auto-scrollbars #f (get-agenda-height) 0 0)
             (send canvas refresh-now))]) )
+
+  (set-box! current-timer timer) ;; so that the timer can be stopped on close
 
   (send canvas init-auto-scrollbars #f (get-agenda-height) 0 0)
   (send frame show #t))
