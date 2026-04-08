@@ -6,6 +6,7 @@
 
 ;;; constants ------------------------------------------------------------------
 
+;; TODO does this actually include it in the package?
 (define-runtime-path default-background-image "backgrounds/bro33-rotated.jpg")
 
 ;; I don't think the user should change these? prob shouldn't be configurable
