@@ -21,7 +21,7 @@
   (expand-user-path "~/Documents/org/life/todos.org"))
 (define custom-background-image #f #;(expand-user-path "./backgrounds/bro255.jpg"))
 
-(define refresh-interval-seconds 60)
+(define refresh-interval-seconds (* 60 2))
 
 (define-values (frame-width frame-height) (values 200 200))
 (define margin 8)
@@ -82,10 +82,14 @@
 
   ;; run the command
   (define agenda-csv
-    (with-output-to-string
-      (thunk (system (format "~a -Q -batch -eval '~a'"
-                             emacs-bin
-                             agenda-command)))))
+    (call-with-output-string
+     (λ (port)
+       (parameterize ([current-output-port port]
+                      ;; TODO handle errors
+                      [current-error-port (open-output-nowhere)])
+         (system (format "~a -Q -batch -eval '~a'"
+                         emacs-bin
+                         agenda-command))))))
 
   ;; map the returned sexp to a list of tasks
   (csv-map list->task agenda-csv))
@@ -95,7 +99,9 @@
 (define tasks (box #f))
 
 (define (update-tasks!)
-  (set-box! tasks (get-agenda emacs-bin agenda-command agenda-file agenda-span)))
+  (display "updating tasks...")
+  (set-box! tasks (get-agenda emacs-bin agenda-command agenda-file agenda-span))
+  (displayln " done!"))
 
 (define (group-tasks-by-deadline tasks)
   (map (λ (l) (cons (task-extra (first l)) l))
@@ -148,7 +154,8 @@
 
 ;; returns the y-position of the bottom of the agenda, because why not
 (define (draw-agenda! dc)
-  (define tasks/by-deadline (group-tasks-by-deadline (unbox tasks)))
+  (define tasks/filtered (filter (λ (t) (equal? (task-todo t) "TODO")) (unbox tasks)))
+  (define tasks/by-deadline (group-tasks-by-deadline tasks/filtered))
 
   (for/fold ([date-group-y margin])
             ([deadline-and-tasks tasks/by-deadline])
@@ -196,6 +203,18 @@
   (send dialog show #t)
   (exit 1))
 
+;; mixin to add close handler to top-level-window<%>
+(define (close-handler-mixin %)
+  (class %
+    (super-new)
+    (define close-handlers '())
+    (define/public (add-close-handler! thnk)
+      (set! close-handlers
+            (cons thnk close-handlers)))
+    (define/augment (on-close)
+             (for ([handler close-handlers])
+               (handler)))))
+
 (module+ main
   (with-handlers ([exn:fail? fail-with-dialog])
     ;; default to the provided background image if no custom supplied
@@ -214,7 +233,7 @@
     (update-tasks!)
 
     (define frame
-      (new frame%
+      (new (close-handler-mixin frame%)
            [label "agenda"]
            [width frame-width]
            [height frame-height]
@@ -251,11 +270,14 @@
            [interval (* 1000 refresh-interval-seconds)]
            [notify-callback
             (λ ()
-              (displayln "updating tasks...")
               (update-tasks!)
               (send canvas init-auto-scrollbars #f (get-agenda-height) 0 0)
               (send canvas refresh-now))]))
+
+    (send frame add-close-handler!
+          (thunk
+           (displayln "stopping timer")
+           (send timer stop)))
     
     (send canvas init-auto-scrollbars #f (get-agenda-height) 0 0)
-    (send frame show #t)
-    (send timer stop)))
+    (send frame show #t)))
